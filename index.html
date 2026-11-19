@@ -28,7 +28,6 @@ button{padding:9px 16px;border-radius:10px;border:0;font-weight:700;cursor:point
 #staffWrap:fullscreen #vexStaff{flex:1;display:flex;align-items:center;justify-content:center;border:none;border-radius:0;overflow:auto}
 #staffWrap.pseudo-fs{position:fixed;inset:0;z-index:10000;width:100%;height:100%;background:#fff;padding:20px;display:flex;flex-direction:column;box-sizing:border-box}
 #staffWrap.pseudo-fs #vexStaff{flex:1;display:flex;align-items:center;justify-content:center;border:none;border-radius:0;overflow:auto}
-/* FIX BUG: tolto il transform:scale(1.4) che sballava i click */
 #exitStaffBtn{display:none;position:fixed;top:12px;right:12px;z-index:99999;background:#dc2626;color:#fff;border:3px solid #fff;padding:14px 20px;font-size:18px;border-radius:12px;box-shadow:0 4px 20px rgba(0,0,0,0.4);cursor:pointer}
 #exitHint{display:none;position:fixed;bottom:12px;left:50%;transform:translateX(-50%);z-index:99999;background:#111827;color:#fff;padding:8px 14px;border-radius:20px;font-size:13px;white-space:nowrap}
 </style>
@@ -51,7 +50,7 @@ button{padding:9px 16px;border-radius:10px;border:0;font-weight:700;cursor:point
 <button id="btnCheck">Verifica</button>
 <div id="timer">00:00</div>
 </div>
-<div class="hint">Clicca direttamente sul pentagramma tra le note per mettere/togliere la stanghetta - doppio clic per uscire dallo schermo intero</div>
+<div class="hint">Clicca tra due note per mettere/togliere la stanghetta - doppio clic per uscire dallo schermo intero</div>
 <div id="feedback"></div>
 <div id="staffWrap">
   <div id="vexStaff"></div>
@@ -66,7 +65,6 @@ const API_URL = "https://script.google.com/macros/s/AKfycbzaPcNf2aNfK6P0dlcpMwJ-
 const VF=Vex.Flow;
 let exercise=[],expectedCuts=[],userCuts=new Set(),measureQuarters=0;
 let startTime=null,timerInterval=null,noteXs=[];
-let currentW=0; // FIX: larghezza reale dell'SVG disegnato
 const PITCHES=['c/4','d/4','e/4','f/4','g/4','a/4','b/4','c/5','d/5','e/5','f/5','g/5'];
 const SIMPLE=[[{q:1,vf:'q'}],[{q:2,vf:'h'}],[{q:0.5,vf:'8'},{q:0.5,vf:'8'}],[{q:0.25,vf:'16'},{q:0.25,vf:'16'},{q:0.25,vf:'16'},{q:0.25,vf:'16'}],[{q:0.5,vf:'8'},{q:0.25,vf:'16'},{q:0.25,vf:'16'}],[{q:0.25,vf:'16'},{q:0.25,vf:'16'},{q:0.5,vf:'8'}],[{q:0.75,vf:'8',dotted:true},{q:0.25,vf:'16'}],[{q:0.25,vf:'16'},{q:0.75,vf:'8',dotted:true}],[{q:1,vf:'qr',rest:true}],[{q:2,vf:'hr',rest:true}],[{q:0.5,vf:'8r',rest:true},{q:0.5,vf:'8r',rest:true}],[{q:0.5,vf:'8r',rest:true},{q:0.5,vf:'8'}],[{q:0.5,vf:'8'},{q:0.5,vf:'8r',rest:true}]];
 const SIMPLE_05=[[{q:0.25,vf:'16'},{q:0.25,vf:'16'}],[{q:0.5,vf:'8'}],[{q:0.25,vf:'16r',rest:true},{q:0.25,vf:'16r',rest:true}],[{q:0.5,vf:'8r',rest:true}]];
@@ -82,7 +80,6 @@ function isLong(q){return q>=1}
 function render(){
   vexStaff.innerHTML=''; noteXs=[];
   const W=Math.max(980,exercise.length*72+150);
-  currentW=W; // salvo larghezza per il calcolo click
   const R=new VF.Renderer(vexStaff,VF.Renderer.Backends.SVG); R.resize(W,160);
   const ctx=R.getContext();
   const cuts=[...userCuts].sort((a,b)=>a-b);
@@ -104,30 +101,31 @@ function render(){
     x+=staveW;
   });
 }
-// FIX CLICK STANGHETTA: calcolo in base alla posizione reale dell'SVG, non del contenitore
+// CLICK CORRETTO - VERSIONE SEMPLICE
+// getAbsoluteX() è già la X dentro l'SVG.
+// Il click dentro l'SVG è: clientX - left dell'SVG a schermo.
+// NON si aggiunge scrollLeft, perché left si è già spostato con lo scroll.
+let lastClickTime = 0;
 vexStaff.addEventListener('click', (e)=>{
   if(!exercise.length) return;
+  const now = Date.now();
+  // Se è il secondo click di un doppio clic, lo ignoro: serve per uscire, non per mettere la stanghetta
+  if(now - lastClickTime < 300){ lastClickTime = now; return; }
+  lastClickTime = now;
   const svg = vexStaff.querySelector('svg');
   if(!svg) return;
   const svgRect = svg.getBoundingClientRect();
-  // Se l'SVG è più largo / più stretto di quanto disegnato (scroll, centro, schermo intero), correggo la scala
-  const scale = currentW > 0 ? (svgRect.width / currentW) : 1;
-  // Posizione del click dentro l'SVG, in coordinate "vere" del pentagramma
-  const clickX = (e.clientX - svgRect.left) / scale + vexStaff.scrollLeft - (vexStaff.scrollLeft ? 0 : 0);
-  // Se c'è scroll, il rect è già spostato, ma devo aggiungere lo scroll solo se l'SVG è tagliato
-  // In pratica: uso il calcolo più affidabile: click dentro l'SVG + scroll
-  let realX = (e.clientX - svgRect.left) / scale;
-  if(vexStaff.scrollWidth > vexStaff.clientWidth){
-    realX = realX + vexStaff.scrollLeft - (svgRect.left - vexStaff.getBoundingClientRect().left);
-  }
+  const clickX = e.clientX - svgRect.left;
   let best=-1, bestDist=1e9;
   for(let i=0;i<noteXs.length-1;i++){
     let mid=(noteXs[i]+noteXs[i+1])/2;
-    let d=Math.abs(realX-mid);
+    let d=Math.abs(clickX-mid);
     if(d<bestDist){bestDist=d; best=i;}
   }
-  // Sicurezza: se clicchi troppo lontano dal centro tra due note, non mettere niente
-  if(best>=0 && bestDist < 60){ if(userCuts.has(best)) userCuts.delete(best); else userCuts.add(best); render(); }
+  if(best>=0 && bestDist < 80){
+    if(userCuts.has(best)) userCuts.delete(best); else userCuts.add(best);
+    render();
+  }
 });
 vexStaff.addEventListener('dblclick', (e)=>{
   const wrap=document.getElementById('staffWrap');
