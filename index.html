@@ -21,9 +21,13 @@ button{padding:9px 16px;border-radius:10px;border:0;font-weight:700;cursor:point
 #vexStaff{overflow-x:auto;border:1.5px solid #111827;border-radius:12px;background:#fff;cursor:crosshair}
 #correzione{margin-top:12px;padding:10px;border:1px dashed #059669;border-radius:10px;display:none;background:#f0fdf4}
 .hint{font-size:12px;opacity:0.6;margin-bottom:6px}
-/* Stesso fullscreen delle altre app */
+/* Schermo intero - tutta l'app */
 #app:fullscreen{max-width:100%;width:100%;height:100%;border:none;border-radius:0;overflow:auto;background:#f9fafb;padding:10px}
 #app.pseudo-fs{position:fixed;inset:0;z-index:9999;max-width:100%;width:100%;height:100%;border:none;border-radius:0;overflow:auto;background:#f9fafb;padding:10px}
+/* Schermo intero - solo pentagramma */
+#vexStaff:fullscreen{width:100%;height:100%;background:#fff;padding:20px;display:flex;align-items:center;justify-content:center;border:none;border-radius:0;overflow:auto}
+#vexStaff.pseudo-fs{position:fixed;inset:0;z-index:10000;width:100%;height:100%;background:#fff;padding:20px;display:flex;align-items:center;justify-content:center;border:none;border-radius:0;overflow:auto}
+#vexStaff.pseudo-fs svg{transform:scale(1.4);transform-origin:top left}
 </style>
 </head>
 <body>
@@ -31,7 +35,10 @@ button{padding:9px 16px;border-radius:10px;border:0;font-weight:700;cursor:point
 <div class="card">
 <div class="row" style="justify-content:space-between">
   <h3 style="margin:0">🎵 Battute e valori</h3>
-  <button id="fsBtn" onclick="toggleFS()" style="background:#fff;color:#111;border:2px solid #222;padding:8px 12px">⛶ Schermo intero</button>
+  <div style="display:flex;gap:8px;flex-wrap:wrap">
+    <button id="fsBtn" onclick="toggleFS()" style="background:#fff;color:#111;border:2px solid #222;padding:8px 12px">⛶ Schermo intero</button>
+    <button id="fsStaffBtn" onclick="toggleStaffFS()" style="background:#111827;color:#fff;border:2px solid #222;padding:8px 12px">⛶ Solo pentagramma</button>
+  </div>
 </div>
 <div class="row">
 <label>Nome e cognome<input id="nomeCognome" placeholder="Es. Mario Rossi"></label>
@@ -112,7 +119,6 @@ function verifica(){
  if(ok){ feedback.innerHTML=`<span style="color:#059669">Perfetto, tutte le battute da ${tempo.value} ✔️ - ${tempoStr}</span>`; correzione.style.display='none'; }
  else { feedback.innerHTML=`<span style="color:#dc2626">Riprova</span> - Hai fatto ${segs.map((v,i)=>`B${i+1}=${v}`).join(' | ')} atteso ${measureQuarters} - ${tempoStr}`; renderCorrezione(); }
  const payload={nomeCognome:nome, tempo:tempo.value, numBattute:numBattute.value, esito:ok?'Perfetto':'KO '+segs.join('|'), tempoImpiegato:tempoStr, dettaglio:segs.join(' | ')};
- // NUOVO per GitHub: solo fetch, niente google.script.run
  fetch(API_URL, {
    method:'POST',
    headers:{'Content-Type':'text/plain;charset=utf-8'},
@@ -122,7 +128,7 @@ function verifica(){
 }
 btnNew.onclick=generate;btnCheck.onclick=verifica;generate();
 
-// STESSA FUNZIONE DELLE ALTRE APP
+// Schermo intero - tutta l'app
 function toggleFS(){
   const app = document.getElementById('app');
   const btn = document.getElementById('fsBtn');
@@ -136,11 +142,29 @@ function toggleFS(){
     app.requestFullscreen().then(()=>{ btn.textContent = '✕ Esci'; }).catch(()=>{ app.classList.add('pseudo-fs'); btn.textContent = '✕ Esci'; });
   } else { app.classList.add('pseudo-fs'); btn.textContent = '✕ Esci'; }
 }
+
+// Schermo intero - solo pentagramma
+function toggleStaffFS(){
+  const staff = document.getElementById('vexStaff');
+  const btn = document.getElementById('fsStaffBtn');
+  if(document.fullscreenElement || staff.classList.contains('pseudo-fs')){
+    if(document.fullscreenElement) document.exitFullscreen();
+    staff.classList.remove('pseudo-fs');
+    btn.textContent = '⛶ Solo pentagramma';
+    return;
+  }
+  if(staff.requestFullscreen){
+    staff.requestFullscreen().then(()=>{ btn.textContent = '✕ Esci'; }).catch(()=>{ staff.classList.add('pseudo-fs'); btn.textContent = '✕ Esci'; });
+  } else { staff.classList.add('pseudo-fs'); btn.textContent = '✕ Esci'; }
+}
 document.addEventListener('fullscreenchange', ()=>{
   if(!document.fullscreenElement){
     const app = document.getElementById('app');
     app.classList.remove('pseudo-fs');
     document.getElementById('fsBtn').textContent = '⛶ Schermo intero';
+    const staff = document.getElementById('vexStaff');
+    staff.classList.remove('pseudo-fs');
+    document.getElementById('fsStaffBtn').textContent = '⛶ Solo pentagramma';
   }
 });
 </script>
