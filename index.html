@@ -77,6 +77,48 @@ function startTimer(){clearInterval(timerInterval);startTime=Date.now();timer.te
 function stopTimer(){clearInterval(timerInterval);}
 function generate(){const sig=tempo.value;measureQuarters=sig==='2/4'?2:sig==='3/4'?3:sig==='4/4'?4:sig==='6/8'?3:4.5;exercise=[];expectedCuts=[];for(let m=0;m<+numBattute.value;m++){let meas=sig.includes('/8')?genComp(measureQuarters):genSimple(measureQuarters);exercise=exercise.concat(meas);if(m<+numBattute.value-1)expectedCuts.push(exercise.length-1);}userCuts=new Set();feedback.innerHTML='';correzione.style.display='none';render();startTimer();}
 function isLong(q){return q>=1}
+
+// FIX DEFINITIVO: leggo la X delle note dal DOM, non da VexFlow
+// Dopo ogni render, prendo tutti i gruppi <g class="vf-stavenote"> in ordine
+// e salvo il loro centro reale dentro l'SVG.
+function updateNoteXsFromDOM(){
+  const svg = vexStaff.querySelector('svg');
+  if(!svg) return;
+  const svgRect = svg.getBoundingClientRect();
+  const groups = vexStaff.querySelectorAll('svg g.vf-stavenote');
+  // Se VexFlow non mette la classe (versioni diverse), prendo tutti i g che contengono una nota
+  let list = Array.from(groups);
+  if(list.length !== exercise.length){
+    // Fallback: prendo tutti i g figli diretti che hanno un path/ellipse = note
+    const allG = Array.from(vexStaff.querySelectorAll('svg > g > g'));
+    if(allG.length >= exercise.length) list = allG.slice(0, exercise.length);
+  }
+  if(list.length === exercise.length){
+    noteXs = list.map(g => {
+      const r = g.getBoundingClientRect();
+      // centro della nota, in coordinate SVG: rect a schermo - rect SVG a schermo
+      // + scrollLeft se l'SVG è più largo del contenitore e stiamo scrollando
+      // In realtà getBoundingClientRect tiene già conto dello scroll, ma per sicurezza
+      // uso offsetLeft del gruppo rispetto all'SVG quando possibile
+      return (r.left + r.width/2) - svgRect.left + vexStaff.scrollLeft - (svgRect.left - vexStaff.getBoundingClientRect().left + vexStaff.scrollLeft);
+    });
+    // La formula sopra si semplifica a: (r.left + r.width/2) - svgRect.left
+    // La ricalcolo pulita per evitare errori di arrotondamento:
+    noteXs = list.map(g => {
+      const r = g.getBoundingClientRect();
+      return (r.left + r.width/2) - svgRect.left;
+    });
+    // Se c'è scroll orizzontale, il rect dell'SVG si è spostato, ma il rect della nota
+    // si è spostato dello stesso tanto, quindi la differenza resta giusta.
+    // Però se l'SVG è tagliato, devo aggiungere lo scroll per tornare a coordinate SVG complete:
+    // lo faccio solo se vexStaff ha scroll
+    if(vexStaff.scrollLeft > 0){
+      // In quel caso svgRect.left è già = containerLeft - scrollLeft, quindi la differenza
+      // è già corretta. Non aggiungo niente. Lascio così.
+    }
+  }
+}
+
 function render(){
   vexStaff.innerHTML=''; noteXs=[];
   const W=Math.max(980,exercise.length*72+150);
@@ -97,29 +139,31 @@ function render(){
     while(p<vfNotes.length){ if(slice[p].rest||isLong(slice[p].q)){p++;continue;} let sum=0,g=[],k=p; while(k<vfNotes.length &&!slice[k].rest &&!isLong(slice[k].q) && sum<beatUnit-0.001){sum=Math.round((sum+slice[k].q)*100)/100; g.push(vfNotes[k]); k++; if(Math.abs(sum-beatUnit)<0.001)break;} if(g.length>1){beams.push(new VF.Beam(g)); p=k;} else p++; }
     let voice=new VF.Voice({num_beats: slice.reduce((s,n)=>s+n.q,0)*4, beat_value:4}); voice.setStrict(false); voice.addTickables(vfNotes);
     new VF.Formatter().joinVoices([voice]).format([voice], staveW-40); voice.draw(ctx,stave); beams.forEach(b=>b.setContext(ctx).draw());
-    vfNotes.forEach((n,i)=>{ try{ noteXs[s+i]=n.getAbsoluteX(); }catch(e){ noteXs[s+i]=x+30+i*60; } });
     x+=staveW;
   });
+  // Aspetto che il browser abbia davvero disegnato, poi leggo le X vere
+  requestAnimationFrame(()=>{ updateNoteXsFromDOM(); });
 }
-// CLICK CORRETTO - VERSIONE SEMPLICE
-// getAbsoluteX() è già la X dentro l'SVG.
-// Il click dentro l'SVG è: clientX - left dell'SVG a schermo.
-// NON si aggiunge scrollLeft, perché left si è già spostato con lo scroll.
+
 let lastClickTime = 0;
 vexStaff.addEventListener('click', (e)=>{
-  if(!exercise.length) return;
+  if(!exercise.length || !noteXs.length) return;
   const now = Date.now();
-  // Se è il secondo click di un doppio clic, lo ignoro: serve per uscire, non per mettere la stanghetta
   if(now - lastClickTime < 300){ lastClickTime = now; return; }
   lastClickTime = now;
   const svg = vexStaff.querySelector('svg');
   if(!svg) return;
   const svgRect = svg.getBoundingClientRect();
-  const clickX = e.clientX - svgRect.left;
+  // Click in coordinate SVG: stessa formula usata per le note
+  const clickX = (e.clientX - svgRect.left);
+  // Se sto scrollando, devo ricalcolare le X delle note in questo momento,
+  // perché getBoundingClientRect cambia con lo scroll
+  updateNoteXsFromDOM();
+  const clickX2 = (e.clientX - svg.getBoundingClientRect().left);
   let best=-1, bestDist=1e9;
   for(let i=0;i<noteXs.length-1;i++){
     let mid=(noteXs[i]+noteXs[i+1])/2;
-    let d=Math.abs(clickX-mid);
+    let d=Math.abs(clickX2-mid);
     if(d<bestDist){bestDist=d; best=i;}
   }
   if(best>=0 && bestDist < 80){
@@ -179,6 +223,7 @@ function toggleStaffFS(){
     wrap.classList.remove('pseudo-fs');
     btn.textContent = '⛶ Solo pentagramma';
     showExitBtn(false);
+    setTimeout(()=>{ updateNoteXsFromDOM(); }, 100);
     return;
   }
   showExitBtn(true);
@@ -190,6 +235,7 @@ function toggleStaffFS(){
     if(!document.fullscreenElement && !wrap.classList.contains('pseudo-fs')){
       wrap.classList.add('pseudo-fs');
     }
+    updateNoteXsFromDOM();
   }, 300);
 }
 document.addEventListener('fullscreenchange', ()=>{
@@ -199,6 +245,9 @@ document.addEventListener('fullscreenchange', ()=>{
     document.getElementById('staffWrap').classList.remove('pseudo-fs');
     document.getElementById('fsStaffBtn').textContent = '⛶ Solo pentagramma';
     showExitBtn(false);
+    setTimeout(()=>{ updateNoteXsFromDOM(); }, 100);
+  } else {
+    setTimeout(()=>{ updateNoteXsFromDOM(); }, 100);
   }
 });
 document.addEventListener('keydown', (e)=>{
@@ -207,6 +256,8 @@ document.addEventListener('keydown', (e)=>{
     if(wrap.classList.contains('pseudo-fs')){ toggleStaffFS(); }
   }
 });
+// Ricalcolo le X anche quando scorri, così il click resta giusto
+vexStaff.addEventListener('scroll', ()=>{ updateNoteXsFromDOM(); }, {passive:true});
 </script>
 </body>
 </html>
