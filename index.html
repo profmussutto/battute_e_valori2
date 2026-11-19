@@ -22,19 +22,15 @@ button{padding:9px 16px;border-radius:10px;border:0;font-weight:700;cursor:point
 #vexStaff{overflow-x:auto;border:1.5px solid #111827;border-radius:12px;background:#fff;cursor:crosshair}
 #correzione{margin-top:12px;padding:10px;border:1px dashed #059669;border-radius:10px;display:none;background:#f0fdf4}
 .hint{font-size:12px;opacity:0.6;margin-bottom:6px}
-/* Schermo intero - tutta l'app */
 #app:fullscreen{max-width:100%;width:100%;height:100%;border:none;border-radius:0;overflow:auto;background:#f9fafb;padding:10px}
 #app.pseudo-fs{position:fixed;inset:0;z-index:9999;max-width:100%;width:100%;height:100%;border:none;border-radius:0;overflow:auto;background:#f9fafb;padding:10px}
-/* Schermo intero - solo pentagramma - ORA CON PULSANTE DENTRO */
 #staffWrap:fullscreen{width:100%;height:100%;background:#fff;padding:20px;display:flex;flex-direction:column;box-sizing:border-box}
 #staffWrap:fullscreen #vexStaff{flex:1;display:flex;align-items:center;justify-content:center;border:none;border-radius:0;overflow:auto}
 #staffWrap.pseudo-fs{position:fixed;inset:0;z-index:10000;width:100%;height:100%;background:#fff;padding:20px;display:flex;flex-direction:column;box-sizing:border-box}
 #staffWrap.pseudo-fs #vexStaff{flex:1;display:flex;align-items:center;justify-content:center;border:none;border-radius:0;overflow:auto}
-#staffWrap.pseudo-fs svg{transform:scale(1.4);transform-origin:top left}
-/* Pulsante Esci - si vede SOLO quando sei a schermo intero pentagramma */
-#exitStaffBtn{display:none;position:absolute;top:8px;right:8px;z-index:10001;background:#dc2626;color:#fff;border:2px solid #fff;padding:10px 16px;font-size:16px;box-shadow:0 2px 10px rgba(0,0,0,0.3)}
-#staffWrap:fullscreen #exitStaffBtn{display:block}
-#staffWrap.pseudo-fs #exitStaffBtn{display:block}
+/* PULSANTE ESCI - FIX PER SITES: position fixed rispetto alla finestra, non absolute */
+#exitStaffBtn{display:none;position:fixed;top:12px;right:12px;z-index:99999;background:#dc2626;color:#fff;border:3px solid #fff;padding:14px 20px;font-size:18px;border-radius:12px;box-shadow:0 4px 20px rgba(0,0,0,0.4);cursor:pointer}
+#exitHint{display:none;position:fixed;bottom:12px;left:50%;transform:translateX(-50%);z-index:99999;background:#111827;color:#fff;padding:8px 14px;border-radius:20px;font-size:13px;white-space:nowrap}
 </style>
 </head>
 <body>
@@ -58,12 +54,14 @@ button{padding:9px 16px;border-radius:10px;border:0;font-weight:700;cursor:point
 <div class="hint">Clicca direttamente sul pentagramma tra le note per mettere/togliere la stanghetta</div>
 <div id="feedback"></div>
 <div id="staffWrap">
-  <button id="exitStaffBtn" onclick="toggleStaffFS()">✕ Esci da schermo intero</button>
   <div id="vexStaff"></div>
 </div>
 <div id="correzione"><b>Correzione:</b><div id="vexCorrect"></div></div>
 </div>
 </div>
+<!-- QUESTI DUE SONO FUORI DA #app, così Sites non li taglia -->
+<button id="exitStaffBtn" onclick="toggleStaffFS()">✕ Esci</button>
+<div id="exitHint">Doppio clic sul pentagramma o tasto Esc per uscire</div>
 <script>
 const API_URL = "https://script.google.com/macros/s/AKfycbzaPcNf2aNfK6P0dlcpMwJ-Q3PvtpAse0HpiMK5R3MC6nLUeOlyYuwmO2ZCJ1APgxEF8A/exec";
 const VF=Vex.Flow;
@@ -117,6 +115,14 @@ vexStaff.addEventListener('click', (e)=>{
   }
   if(best>=0){ if(userCuts.has(best)) userCuts.delete(best); else userCuts.add(best); render(); }
 });
+// NUOVO: doppio clic per uscire da Solo pentagramma - funziona anche dentro Sites
+vexStaff.addEventListener('dblclick', (e)=>{
+  const wrap=document.getElementById('staffWrap');
+  if(document.fullscreenElement || wrap.classList.contains('pseudo-fs')){
+    e.preventDefault(); e.stopPropagation();
+    toggleStaffFS();
+  }
+});
 function renderCorrezione(){
  vexCorrect.innerHTML=''; const W=Math.max(980,exercise.length*72+120); const R=new VF.Renderer(vexCorrect,VF.Renderer.Backends.SVG); R.resize(W,160); const ctx=R.getContext();
  let x=10, currIdx=0; for(let m=0;m<+numBattute.value;m++){ let acc=0, measNotes=[], measVF=[]; while(currIdx<exercise.length && acc<measureQuarters-0.001){ measNotes.push(exercise[currIdx]); let n=exercise[currIdx]; let st=new VF.StaveNote({keys:[n.pitch],duration:n.vf+(n.rest?'r':'')}); if(n.dotted) VF.Dot.buildAndAttach([st],{all:true}); measVF.push(st); acc=Math.round((acc+n.q)*100)/100; currIdx++; } let staveW=Math.max(120, measVF.length*70+60); let stave=new VF.Stave(x,10,staveW); if(m===0) stave.addClef('treble').addTimeSignature(tempo.value); if(m===+numBattute.value-1) stave.setEndBarType(VF.Barline.type.END); else stave.setEndBarType(VF.Barline.type.SINGLE); stave.setContext(ctx).draw(); let beams=[]; let p=0; const beatUnit=tempo.value.includes('/8')?1.5:1; while(p<measVF.length){ if(measNotes[p].rest || isLong(measNotes[p].q)){p++;continue;} let sum=0,g=[],k=p; while(k<measVF.length &&!measNotes[k].rest &&!isLong(measNotes[k].q) && sum<beatUnit-0.001){ sum=Math.round((sum+measNotes[k].q)*100)/100; g.push(measVF[k]); k++; if(Math.abs(sum-beatUnit)<0.001)break;} if(g.length>1){beams.push(new VF.Beam(g)); p=k;} else p++; } let voice=new VF.Voice({num_beats: measureQuarters*4, beat_value:4}); voice.setStrict(false); voice.addTickables(measVF); new VF.Formatter().joinVoices([voice]).format([voice], staveW-50); voice.draw(ctx,stave); beams.forEach(b=>b.setContext(ctx).draw()); x+=staveW; } correzione.style.display='block';
@@ -138,7 +144,11 @@ function verifica(){
 }
 btnNew.onclick=generate;btnCheck.onclick=verifica;generate();
 
-// Schermo intero - tutta l'app
+// FIX SITES: mostra/nasconde il pulsante Esci con JS, non con CSS
+function showExitBtn(show){
+  document.getElementById('exitStaffBtn').style.display = show ? 'block' : 'none';
+  document.getElementById('exitHint').style.display = show ? 'block' : 'none';
+}
 function toggleFS(){
   const app = document.getElementById('app');
   const btn = document.getElementById('fsBtn');
@@ -152,20 +162,30 @@ function toggleFS(){
     app.requestFullscreen().then(()=>{ btn.textContent = '✕ Esci'; }).catch(()=>{ app.classList.add('pseudo-fs'); btn.textContent = '✕ Esci'; });
   } else { app.classList.add('pseudo-fs'); btn.textContent = '✕ Esci'; }
 }
-
-// Schermo intero - solo pentagramma - ORA USA staffWrap, così il pulsante Esci resta visibile
 function toggleStaffFS(){
   const wrap = document.getElementById('staffWrap');
   const btn = document.getElementById('fsStaffBtn');
+  // Se siamo già a schermo intero -> esci
   if(document.fullscreenElement || wrap.classList.contains('pseudo-fs')){
     if(document.fullscreenElement) document.exitFullscreen();
     wrap.classList.remove('pseudo-fs');
     btn.textContent = '⛶ Solo pentagramma';
+    showExitBtn(false);
     return;
   }
+  // Entra: prova vero fullscreen, se Sites lo blocca usa pseudo-fs
+  // In entrambi i casi mostro subito il pulsante Esci con JS
+  showExitBtn(true);
+  btn.textContent = '✕ Esci';
   if(wrap.requestFullscreen){
-    wrap.requestFullscreen().then(()=>{ btn.textContent = '✕ Esci'; }).catch(()=>{ wrap.classList.add('pseudo-fs'); btn.textContent = '✕ Esci'; });
-  } else { wrap.classList.add('pseudo-fs'); btn.textContent = '✕ Esci'; }
+    wrap.requestFullscreen().catch(()=>{ wrap.classList.add('pseudo-fs'); });
+  } else { wrap.classList.add('pseudo-fs'); }
+  // Sicurezza: se dopo 300ms non siamo in fullscreen vero, usa pseudo-fs
+  setTimeout(()=>{
+    if(!document.fullscreenElement && !wrap.classList.contains('pseudo-fs')){
+      wrap.classList.add('pseudo-fs');
+    }
+  }, 300);
 }
 document.addEventListener('fullscreenchange', ()=>{
   if(!document.fullscreenElement){
@@ -173,6 +193,14 @@ document.addEventListener('fullscreenchange', ()=>{
     document.getElementById('fsBtn').textContent = '⛶ Schermo intero';
     document.getElementById('staffWrap').classList.remove('pseudo-fs');
     document.getElementById('fsStaffBtn').textContent = '⛶ Solo pentagramma';
+    showExitBtn(false);
+  }
+});
+// NUOVO: Esc funziona anche in pseudo-fs dentro Sites
+document.addEventListener('keydown', (e)=>{
+  if(e.key === 'Escape'){
+    const wrap = document.getElementById('staffWrap');
+    if(wrap.classList.contains('pseudo-fs')){ toggleStaffFS(); }
   }
 });
 </script>
