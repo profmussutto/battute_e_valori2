@@ -18,16 +18,23 @@ button{padding:9px 16px;border-radius:10px;border:0;font-weight:700;cursor:point
 #btnCheck{background:#eef2ff;border:1px solid #c7d2fe}
 #timer{font-weight:800;font-size:18px;margin-left:auto;background:#f3f4f6;padding:6px 12px;border-radius:8px;min-width:60px;text-align:center}
 #feedback{margin:10px 0;font-weight:700;min-height:22px}
+#staffWrap{position:relative}
 #vexStaff{overflow-x:auto;border:1.5px solid #111827;border-radius:12px;background:#fff;cursor:crosshair}
 #correzione{margin-top:12px;padding:10px;border:1px dashed #059669;border-radius:10px;display:none;background:#f0fdf4}
 .hint{font-size:12px;opacity:0.6;margin-bottom:6px}
 /* Schermo intero - tutta l'app */
 #app:fullscreen{max-width:100%;width:100%;height:100%;border:none;border-radius:0;overflow:auto;background:#f9fafb;padding:10px}
 #app.pseudo-fs{position:fixed;inset:0;z-index:9999;max-width:100%;width:100%;height:100%;border:none;border-radius:0;overflow:auto;background:#f9fafb;padding:10px}
-/* Schermo intero - solo pentagramma */
-#vexStaff:fullscreen{width:100%;height:100%;background:#fff;padding:20px;display:flex;align-items:center;justify-content:center;border:none;border-radius:0;overflow:auto}
-#vexStaff.pseudo-fs{position:fixed;inset:0;z-index:10000;width:100%;height:100%;background:#fff;padding:20px;display:flex;align-items:center;justify-content:center;border:none;border-radius:0;overflow:auto}
-#vexStaff.pseudo-fs svg{transform:scale(1.4);transform-origin:top left}
+/* Schermo intero - solo pentagramma - ORA CON PULSANTE DENTRO */
+#staffWrap:fullscreen{width:100%;height:100%;background:#fff;padding:20px;display:flex;flex-direction:column;box-sizing:border-box}
+#staffWrap:fullscreen #vexStaff{flex:1;display:flex;align-items:center;justify-content:center;border:none;border-radius:0;overflow:auto}
+#staffWrap.pseudo-fs{position:fixed;inset:0;z-index:10000;width:100%;height:100%;background:#fff;padding:20px;display:flex;flex-direction:column;box-sizing:border-box}
+#staffWrap.pseudo-fs #vexStaff{flex:1;display:flex;align-items:center;justify-content:center;border:none;border-radius:0;overflow:auto}
+#staffWrap.pseudo-fs svg{transform:scale(1.4);transform-origin:top left}
+/* Pulsante Esci - si vede SOLO quando sei a schermo intero pentagramma */
+#exitStaffBtn{display:none;position:absolute;top:8px;right:8px;z-index:10001;background:#dc2626;color:#fff;border:2px solid #fff;padding:10px 16px;font-size:16px;box-shadow:0 2px 10px rgba(0,0,0,0.3)}
+#staffWrap:fullscreen #exitStaffBtn{display:block}
+#staffWrap.pseudo-fs #exitStaffBtn{display:block}
 </style>
 </head>
 <body>
@@ -50,7 +57,10 @@ button{padding:9px 16px;border-radius:10px;border:0;font-weight:700;cursor:point
 </div>
 <div class="hint">Clicca direttamente sul pentagramma tra le note per mettere/togliere la stanghetta</div>
 <div id="feedback"></div>
-<div id="vexStaff"></div>
+<div id="staffWrap">
+  <button id="exitStaffBtn" onclick="toggleStaffFS()">✕ Esci da schermo intero</button>
+  <div id="vexStaff"></div>
+</div>
 <div id="correzione"><b>Correzione:</b><div id="vexCorrect"></div></div>
 </div>
 </div>
@@ -143,27 +153,25 @@ function toggleFS(){
   } else { app.classList.add('pseudo-fs'); btn.textContent = '✕ Esci'; }
 }
 
-// Schermo intero - solo pentagramma
+// Schermo intero - solo pentagramma - ORA USA staffWrap, così il pulsante Esci resta visibile
 function toggleStaffFS(){
-  const staff = document.getElementById('vexStaff');
+  const wrap = document.getElementById('staffWrap');
   const btn = document.getElementById('fsStaffBtn');
-  if(document.fullscreenElement || staff.classList.contains('pseudo-fs')){
+  if(document.fullscreenElement || wrap.classList.contains('pseudo-fs')){
     if(document.fullscreenElement) document.exitFullscreen();
-    staff.classList.remove('pseudo-fs');
+    wrap.classList.remove('pseudo-fs');
     btn.textContent = '⛶ Solo pentagramma';
     return;
   }
-  if(staff.requestFullscreen){
-    staff.requestFullscreen().then(()=>{ btn.textContent = '✕ Esci'; }).catch(()=>{ staff.classList.add('pseudo-fs'); btn.textContent = '✕ Esci'; });
-  } else { staff.classList.add('pseudo-fs'); btn.textContent = '✕ Esci'; }
+  if(wrap.requestFullscreen){
+    wrap.requestFullscreen().then(()=>{ btn.textContent = '✕ Esci'; }).catch(()=>{ wrap.classList.add('pseudo-fs'); btn.textContent = '✕ Esci'; });
+  } else { wrap.classList.add('pseudo-fs'); btn.textContent = '✕ Esci'; }
 }
 document.addEventListener('fullscreenchange', ()=>{
   if(!document.fullscreenElement){
-    const app = document.getElementById('app');
-    app.classList.remove('pseudo-fs');
+    document.getElementById('app').classList.remove('pseudo-fs');
     document.getElementById('fsBtn').textContent = '⛶ Schermo intero';
-    const staff = document.getElementById('vexStaff');
-    staff.classList.remove('pseudo-fs');
+    document.getElementById('staffWrap').classList.remove('pseudo-fs');
     document.getElementById('fsStaffBtn').textContent = '⛶ Solo pentagramma';
   }
 });
